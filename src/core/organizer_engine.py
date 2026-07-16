@@ -65,3 +65,13 @@ class OrganizerEngine:
             records=records,
             dry_run=dry_run,
         )
+    
+    def undo(self) -> list[str]:
+        """
+        Undo the most recent file organization.
+
+        Returns:
+            list[str]: Messages describing the undo operation.
+        """
+
+        return self.file_organizer.undo()
