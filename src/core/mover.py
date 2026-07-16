@@ -12,25 +12,30 @@ class Mover:
         self,
         records: list[PreviewRecord],
     ) -> tuple[list[MoveRecord], list[str]]:
+        """
+        Move files described by the preview records.
 
-        completed: list[MoveRecord] = []
-        messages: list[str] = []
+        Returns:
+            completed_moves : list[MoveRecord]
+            log_messages    : list[str]
+        """
+
+        completed_moves: list[MoveRecord] = []
+        log_messages: list[str] = []
 
         for record in records:
-
             try:
-
+                # Create destination folder if necessary
                 record.destination.parent.mkdir(
                     parents=True,
                     exist_ok=True,
                 )
 
+                # Never overwrite an existing file
                 if record.destination.exists():
-
-                    messages.append(
-                        f"Skipped (exists): {record.destination}"
+                    log_messages.append(
+                        f"Skipped (already exists): {record.destination.name}"
                     )
-
                     continue
 
                 shutil.move(
@@ -38,21 +43,20 @@ class Mover:
                     str(record.destination),
                 )
 
-                completed.append(
+                completed_moves.append(
                     MoveRecord(
                         source=record.source,
                         destination=record.destination,
                     )
                 )
 
-                messages.append(
+                log_messages.append(
                     f"Moved: {record.source.name}"
                 )
 
             except Exception as exc:
-
-                messages.append(
-                    f"ERROR: {record.source.name}: {exc}"
+                log_messages.append(
+                    f"Error moving '{record.source.name}': {exc}"
                 )
 
-        return completed, messages
+        return completed_moves, log_messages
