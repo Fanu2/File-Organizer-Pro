@@ -4,7 +4,7 @@ from pathlib import Path
 
 @dataclass(slots=True)
 class MoveRecord:
-    """Represents one completed file move."""
+    """Represents a successfully moved file."""
 
     source: Path
     destination: Path
