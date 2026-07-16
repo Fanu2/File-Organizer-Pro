@@ -8,11 +8,13 @@ from src.models.settings import Settings
 from src.core.file_organizer import FileOrganizer
 
 
+
 class OrganizerEngine:
     """Coordinates all file organization operations."""
 
     def __init__(self) -> None:
         """Initialize application services."""
+
         self.scanner = Scanner()
         self.file_organizer = FileOrganizer()
 
@@ -58,6 +60,20 @@ class OrganizerEngine:
             records.append(record)
 
         return records
+    
+    def organize(
+        self,
+        records: list[PreviewRecord],
+        dry_run: bool,
+    ) -> list[str]:
+        """
+        Organize files or simulate organization.
+        """
+
+        return self.file_organizer.organize(
+            records=records,
+            dry_run=dry_run,
+        )
    
     def organize(
         self,
