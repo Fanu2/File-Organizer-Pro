@@ -6,8 +6,6 @@ from src.ui.main_window import MainWindow
 
 
 def main() -> int:
-    """Application entry point."""
-
     app = QApplication(sys.argv)
 
     window = MainWindow()
