@@ -10,19 +10,21 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QStatusBar,
     QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from src.core.organizer_engine import OrganizerEngine
-from src.models.settings import Settings
-from PySide6.QtWidgets import QTableWidgetItem
-
 from src.core.config_manager import ConfigManager
+from src.core.organizer_engine import OrganizerEngine
+from src.core.undo_manager import UndoManager
+from src.models.preview_record import PreviewRecord
+from src.models.settings import Settings
 
 
 class MainWindow(QMainWindow):
@@ -32,11 +34,14 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.selected_folder: Path | None = None
+        self.preview_records: list[PreviewRecord] = []
 
-        # Core application objects
         self.engine = OrganizerEngine()
         self.config = ConfigManager()
         self.config.load()
+
+        self.undo_manager = UndoManager()
+
         self.settings = Settings()
 
         self.setWindowTitle("File Organizer Pro")
@@ -46,7 +51,6 @@ class MainWindow(QMainWindow):
         self._create_layout()
         self._create_status_bar()
         self._connect_signals()
-        self.preview_records = []
 
     def _create_widgets(self) -> None:
         self.folder_label = QLabel("Folder")
@@ -100,9 +104,7 @@ class MainWindow(QMainWindow):
 
         self.exit_button = QPushButton("Exit")
 
-        self.organize_button.clicked.connect(
-        self._organize_files
-        )
+
 
     def _create_layout(self) -> None:
         central_widget = QWidget()
@@ -161,6 +163,9 @@ class MainWindow(QMainWindow):
         self.exit_button.clicked.connect(self.close)
         self.browse_button.clicked.connect(self._browse_folder)
         self.scan_button.clicked.connect(self._scan_folder)
+        self.organize_button.clicked.connect(
+            self._organize_files
+        )
 
     def _browse_folder(self) -> None:
         """Open a folder selection dialog."""
@@ -188,18 +193,21 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Folder selected")
 
     def _scan_folder(self) -> None:
-        """Generate a preview of the organization."""
+        """Scan the selected folder and generate an organization preview."""
 
         if self.selected_folder is None:
             return
 
-        # Read current settings from the UI
+        # Read current settings from the UI.
         self.settings.dry_run = self.dry_run_checkbox.isChecked()
-        self.settings.recursive = self.recursive_checkbox.isChecked()
+        self.settings.recursive = (
+            self.recursive_checkbox.isChecked()
+        )
         self.settings.ignore_hidden = (
             self.hidden_checkbox.isChecked()
         )
 
+        # Generate preview records.
         records = self.engine.preview(
             folder=self.selected_folder,
             settings=self.settings,
@@ -208,20 +216,20 @@ class MainWindow(QMainWindow):
 
         self.preview_records = records
 
+        # Update the preview table.
         self._populate_preview_table(records)
 
-        self.files_scanned_label.setText(
-            f"Files Scanned : {len(records)}"
+        # Update the summary.
+        self._update_summary(
+            scanned=len(records),
+            to_move=len(records),
+            skipped=0,
         )
 
-        self.files_to_move_label.setText(
-            f"Files To Move : {len(records)}"
-        )
-
-        self.skipped_label.setText("Skipped : 0")
-
+        # Enable or disable the Organize button.
         self.organize_button.setEnabled(bool(records))
 
+        # Log the completed scan.
         self.activity_log.appendPlainText("")
         self.activity_log.appendPlainText(
             f"Preview generated for {len(records)} files."
@@ -231,7 +239,7 @@ class MainWindow(QMainWindow):
 
     def _populate_preview_table(
         self,
-        records,
+        records: list[PreviewRecord],
     ) -> None:
         """Populate the preview table."""
 
@@ -267,24 +275,100 @@ class MainWindow(QMainWindow):
                 ),
             )
 
+    def _reset_summary(self) -> None:
+        """Reset summary labels."""
+
+        self.files_scanned_label.setText(
+            "Files Scanned : 0"
+        )
+        self.files_to_move_label.setText(
+            "Files To Move : 0"
+        )
+        self.skipped_label.setText(
+            "Skipped : 0"
+        )
+
+
+    def _update_summary(
+        self,
+        scanned: int,
+        to_move: int,
+        skipped: int,
+    ) -> None:
+        """Update summary labels."""
+
+        self.files_scanned_label.setText(
+            f"Files Scanned : {scanned}"
+        )
+        self.files_to_move_label.setText(
+            f"Files To Move : {to_move}"
+        )
+        self.skipped_label.setText(
+            f"Skipped : {skipped}"
+        )
+
     def get_selected_folder(self) -> Path | None:
         """Return the currently selected folder."""
 
         return self.selected_folder
     
     def _organize_files(self) -> None:
-        """Organize files."""
+        """Organize files or perform a dry run."""
 
+        if not self.preview_records:
+            return
+
+        dry_run = self.dry_run_checkbox.isChecked()
+
+        # Confirm before performing real file moves.
+        if not dry_run:
+            reply = QMessageBox.question(
+                self,
+                "Confirm Organization",
+                (
+                    "Files will be moved to their destination folders.\n\n"
+                    "This operation can be undone.\n\n"
+                    "Do you want to continue?"
+                ),
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+
+            if reply != QMessageBox.Yes:
+                return
+
+        # Execute the organization.
         messages = self.engine.organize(
-            self.preview_records,
-            self.dry_run_checkbox.isChecked(),
+            records=self.preview_records,
+            dry_run=dry_run,
         )
 
+        # Display log messages.
         self.activity_log.appendPlainText("")
 
         for message in messages:
             self.activity_log.appendPlainText(message)
 
+        if dry_run:
+            self.statusBar().showMessage(
+                "Dry Run completed"
+            )
+            return
+
+        # Refresh the interface after a successful organization.
+        self.preview_table.setRowCount(0)
+
+        self.preview_records.clear()
+
+        self._reset_summary()
+
+        self.scan_button.setEnabled(True)
+        self.organize_button.setEnabled(False)
+
+        self.undo_button.setEnabled(
+            self.undo_manager.has_history()
+        )
+
         self.statusBar().showMessage(
-            "Dry Run completed"
+            "Organization completed"
         )

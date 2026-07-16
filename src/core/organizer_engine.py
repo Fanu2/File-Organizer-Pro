@@ -1,12 +1,11 @@
 from pathlib import Path
 
 from src.core.categorizer import Categorizer
+from src.core.file_organizer import FileOrganizer
 from src.core.scanner import Scanner
 from src.models.preview_record import PreviewRecord
 from src.models.scan_result import ScanResult
 from src.models.settings import Settings
-from src.core.file_organizer import FileOrganizer
-
 
 
 class OrganizerEngine:
@@ -23,9 +22,7 @@ class OrganizerEngine:
         folder: Path,
         settings: Settings,
     ) -> ScanResult:
-        """
-        Scan a folder and return the scan results.
-        """
+        """Scan a folder and return the scan results."""
 
         return self.scanner.scan(
             folder=folder,
@@ -39,12 +36,7 @@ class OrganizerEngine:
         settings: Settings,
         categories: dict[str, list[str]],
     ) -> list[PreviewRecord]:
-        """
-        Generate a preview of the planned organization.
-
-        No files are moved. A list of PreviewRecord objects is returned,
-        describing what would happen during organization.
-        """
+        """Generate a preview without moving files."""
 
         scan_result = self.scan(folder, settings)
 
@@ -53,45 +45,23 @@ class OrganizerEngine:
         records: list[PreviewRecord] = []
 
         for file in scan_result.files:
-            record = categorizer.categorize(
-                file=file,
-                root=folder,
+            records.append(
+                categorizer.categorize(
+                    file=file,
+                    root=folder,
+                )
             )
-            records.append(record)
 
         return records
-    
+
     def organize(
         self,
         records: list[PreviewRecord],
         dry_run: bool,
     ) -> list[str]:
-        """
-        Organize files or simulate organization.
-        """
+        """Organize files or perform a dry run."""
 
         return self.file_organizer.organize(
             records=records,
             dry_run=dry_run,
         )
-   
-    def organize(
-        self,
-        records: list[PreviewRecord],
-        dry_run: bool,
-    ) -> list[str]:
-        """
-        Organize files.
-
-        For this milestone only Dry Run is implemented.
-        """
-
-        if dry_run:
-            return self.file_organizer.dry_run(records)
-
-        return [
-            "",
-            "Real organization",
-            "will be implemented",
-            "in Version 0.6",
-        ]
