@@ -45,6 +45,16 @@ class FileOrganizer:
 
         return messages
 
+    def undo(self) -> list[str]:
+        """
+        Undo the most recent organization.
+
+        Returns:
+            list[str]: Messages describing the undo operation.
+        """
+
+        return self.undo_manager.undo()
+
     def _dry_run(
         self,
         records: list[PreviewRecord],
