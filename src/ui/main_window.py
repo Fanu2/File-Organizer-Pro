@@ -160,11 +160,16 @@ class MainWindow(QMainWindow):
         self.setStatusBar(status_bar)
 
     def _connect_signals(self) -> None:
+        """Connect widget signals."""
+
         self.exit_button.clicked.connect(self.close)
         self.browse_button.clicked.connect(self._browse_folder)
         self.scan_button.clicked.connect(self._scan_folder)
         self.organize_button.clicked.connect(
             self._organize_files
+        )
+        self.undo_button.clicked.connect(
+            self._undo_last_operation
         )
 
     def _browse_folder(self) -> None:
@@ -371,4 +376,33 @@ class MainWindow(QMainWindow):
 
         self.statusBar().showMessage(
             "Organization completed"
+        )
+
+    def _undo_last_operation(self) -> None:
+        """Undo the most recent file organization."""
+
+        messages = self.engine.undo()
+
+        self.activity_log.appendPlainText("")
+        self.activity_log.appendPlainText("=" * 60)
+        self.activity_log.appendPlainText("UNDO")
+        self.activity_log.appendPlainText("=" * 60)
+
+        for message in messages:
+            self.activity_log.appendPlainText(message)
+
+        self.preview_table.setRowCount(0)
+
+        self.preview_records.clear()
+
+        self._reset_summary()
+
+        self.organize_button.setEnabled(False)
+
+        self.undo_button.setEnabled(
+            self.undo_manager.has_history()
+        )
+
+        self.statusBar().showMessage(
+            "Undo completed"
         )
