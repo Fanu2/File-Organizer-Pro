@@ -1,20 +1,28 @@
-from PySide6.QtCore import Qt
+from pathlib import Path
+
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
+    QFileDialog,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
-    QPushButton,
     QPlainTextEdit,
+    QPushButton,
     QStatusBar,
     QTableWidget,
-    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
+
+from src.core.organizer_engine import OrganizerEngine
+from src.models.settings import Settings
+from PySide6.QtWidgets import QTableWidgetItem
+
+from src.core.config_manager import ConfigManager
 
 
 class MainWindow(QMainWindow):
@@ -23,6 +31,14 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
 
+        self.selected_folder: Path | None = None
+
+        # Core application objects
+        self.engine = OrganizerEngine()
+        self.config = ConfigManager()
+        self.config.load()
+        self.settings = Settings()
+
         self.setWindowTitle("File Organizer Pro")
         self.resize(1000, 700)
 
@@ -30,6 +46,7 @@ class MainWindow(QMainWindow):
         self._create_layout()
         self._create_status_bar()
         self._connect_signals()
+        self.preview_records = []
 
     def _create_widgets(self) -> None:
         self.folder_label = QLabel("Folder")
@@ -53,14 +70,20 @@ class MainWindow(QMainWindow):
             ["File", "Category", "Destination"]
         )
         self.preview_table.verticalHeader().setVisible(False)
-        self.preview_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.preview_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.preview_table.setSelectionMode(QTableWidget.SingleSelection)
+        self.preview_table.setEditTriggers(
+            QAbstractItemView.NoEditTriggers
+        )
+        self.preview_table.setSelectionBehavior(
+            QAbstractItemView.SelectRows
+        )
+        self.preview_table.setSelectionMode(
+            QAbstractItemView.SingleSelection
+        )
         self.preview_table.horizontalHeader().setStretchLastSection(True)
 
         self.activity_log = QPlainTextEdit()
         self.activity_log.setReadOnly(True)
-        self.activity_log.setPlainText("Ready...")
+        self.activity_log.appendPlainText("Ready...")
 
         self.files_scanned_label = QLabel("Files Scanned : 0")
         self.files_to_move_label = QLabel("Files To Move : 0")
@@ -76,6 +99,10 @@ class MainWindow(QMainWindow):
         self.undo_button.setEnabled(False)
 
         self.exit_button = QPushButton("Exit")
+
+        self.organize_button.clicked.connect(
+        self._organize_files
+        )
 
     def _create_layout(self) -> None:
         central_widget = QWidget()
@@ -132,3 +159,132 @@ class MainWindow(QMainWindow):
 
     def _connect_signals(self) -> None:
         self.exit_button.clicked.connect(self.close)
+        self.browse_button.clicked.connect(self._browse_folder)
+        self.scan_button.clicked.connect(self._scan_folder)
+
+    def _browse_folder(self) -> None:
+        """Open a folder selection dialog."""
+
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Select Folder",
+            str(Path.home()),
+        )
+
+        if not folder:
+            return
+
+        self.selected_folder = Path(folder)
+
+        self.folder_edit.setText(str(self.selected_folder))
+
+        self.scan_button.setEnabled(True)
+
+        self.activity_log.appendPlainText("")
+        self.activity_log.appendPlainText(
+            f"Selected folder: {self.selected_folder}"
+        )
+
+        self.statusBar().showMessage("Folder selected")
+
+    def _scan_folder(self) -> None:
+        """Generate a preview of the organization."""
+
+        if self.selected_folder is None:
+            return
+
+        # Read current settings from the UI
+        self.settings.dry_run = self.dry_run_checkbox.isChecked()
+        self.settings.recursive = self.recursive_checkbox.isChecked()
+        self.settings.ignore_hidden = (
+            self.hidden_checkbox.isChecked()
+        )
+
+        records = self.engine.preview(
+            folder=self.selected_folder,
+            settings=self.settings,
+            categories=self.config.categories,
+        )
+
+        self.preview_records = records
+
+        self._populate_preview_table(records)
+
+        self.files_scanned_label.setText(
+            f"Files Scanned : {len(records)}"
+        )
+
+        self.files_to_move_label.setText(
+            f"Files To Move : {len(records)}"
+        )
+
+        self.skipped_label.setText("Skipped : 0")
+
+        self.organize_button.setEnabled(bool(records))
+
+        self.activity_log.appendPlainText("")
+        self.activity_log.appendPlainText(
+            f"Preview generated for {len(records)} files."
+        )
+
+        self.statusBar().showMessage("Preview ready")
+
+    def _populate_preview_table(
+        self,
+        records,
+    ) -> None:
+        """Populate the preview table."""
+
+        self.preview_table.setRowCount(0)
+
+        for record in records:
+
+            row = self.preview_table.rowCount()
+
+            self.preview_table.insertRow(row)
+
+            self.preview_table.setItem(
+                row,
+                0,
+                QTableWidgetItem(record.source.name),
+            )
+
+            self.preview_table.setItem(
+                row,
+                1,
+                QTableWidgetItem(record.category),
+            )
+
+            self.preview_table.setItem(
+                row,
+                2,
+                QTableWidgetItem(
+                    str(
+                        record.destination.relative_to(
+                            self.selected_folder
+                        )
+                    )
+                ),
+            )
+
+    def get_selected_folder(self) -> Path | None:
+        """Return the currently selected folder."""
+
+        return self.selected_folder
+    
+    def _organize_files(self) -> None:
+        """Organize files."""
+
+        messages = self.engine.organize(
+            self.preview_records,
+            self.dry_run_checkbox.isChecked(),
+        )
+
+        self.activity_log.appendPlainText("")
+
+        for message in messages:
+            self.activity_log.appendPlainText(message)
+
+        self.statusBar().showMessage(
+            "Dry Run completed"
+        )
